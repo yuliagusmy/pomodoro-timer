@@ -8,6 +8,9 @@ const TimerContainer = styled.div`
   align-items: center;
   gap: 2.2rem;
   width: 100%;
+  @media (max-width: 600px) {
+    gap: 1.0rem;
+  }
 `
 
 const TimerDisplay = styled.div<{isBreak?: boolean}>`
@@ -24,8 +27,8 @@ const TimerDisplay = styled.div<{isBreak?: boolean}>`
   margin-bottom: 0.5rem;
   transition: background 0.3s;
   @media (max-width: 600px) {
-    font-size: 1.3rem;
-    padding: 0.7rem 0.7rem;
+    font-size: 2.0rem;
+    padding: 1.0rem 1.3rem;
     border-width: 3px;
     border-radius: 8px;
     min-width: 120px;
@@ -36,13 +39,14 @@ const ButtonContainer = styled.div`
   display: flex;
   flex-wrap: wrap;
   gap: 1.2rem 1.2rem;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0;
   justify-content: center;
   width: 100%;
   @media (max-width: 600px) {
     flex-direction: row;
     align-items: center;
-    gap: 0.5rem 0.5rem;
+    gap: 2.0rem 1.0rem;
+    margin-bottom: 0;
   }
 `
 
@@ -73,9 +77,9 @@ const PixelButton = styled(motion.button)<{isBreak?: boolean}>`
   }
   @media (max-width: 600px) {
     font-size: 0.7rem;
-    padding: 0.5rem 0.7rem;
+    padding: 0.5rem 1rem;
     border-width: 2px;
-    border-radius: 6px;
+    border-radius: 8px;
   }
 `
 
@@ -94,6 +98,7 @@ const PixelProgress = styled.div`
     transition: width 1s linear;
   }
   @media (max-width: 600px) {
+    width: 90%;
     height: 16px;
     border-width: 2px;
     border-radius: 5px;
@@ -126,6 +131,19 @@ type PomodoroTimerProps = {
   onCountChange?: (pomodoro: number, breakCount: number) => void,
   onModeChange?: (isBreak: boolean) => void
 }
+
+const SkipButtonContainer = styled.div`
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  margin-top: 0.2rem;
+  gap: 1.2rem;
+  @media (max-width: 600px) {
+    gap: 0.5rem;
+    margin-top: 0.2rem;
+    margin-bottom: 2.2rem;
+  }
+`
 
 const PomodoroTimer = forwardRef<{
   resetCount: () => void
@@ -292,21 +310,6 @@ const PomodoroTimer = forwardRef<{
       <PixelProgress>
         <div className="bar" style={{ width: `${progress}%`, background: isBreak ? '#ffe066' : 'repeating-linear-gradient(135deg, #f4845f 0px, #f4845f 12px, #f7b267 12px, #f7b267 24px)' }} />
       </PixelProgress>
-      {isBreak && ytSrc && (
-        <div style={{ width: '100%', margin: '0.5rem 0', display: 'flex', justifyContent: 'center', position: 'relative' }}>
-          <iframe
-            ref={ytIframeRef}
-            width="1"
-            height="1"
-            src={ytSrc + '&enablejsapi=1'}
-            title="Break Song"
-            frameBorder="0"
-            allow="autoplay; encrypted-media"
-            allowFullScreen
-            style={{ opacity: 0, position: 'absolute', left: 0, top: 0, pointerEvents: 'none' }}
-          />
-        </div>
-      )}
       <ButtonContainer>
         {!isRunning ? (
           <PixelButton isBreak={isBreak}
@@ -333,24 +336,28 @@ const PomodoroTimer = forwardRef<{
           Reset
         </PixelButton>
       </ButtonContainer>
-      <div className="skip-btn-mobile"><PixelButton isBreak={isBreak}
-        whileHover={{ scale: 1.08 }}
-        whileTap={{ scale: 0.96 }}
-        onClick={isBreak ? skipBreak : () => {
-          setPomodoroCount(prev => {
-            const newVal = prev + 1
-            if (onCountChange) onCountChange(newVal, breakCount)
-            return newVal
-          })
-          setIsBreak(true)
-          setTimeLeft((pomodoroCount + 1) % 4 === 0 ? 15 * 60 : 5 * 60)
-          setProgress(100)
-          setIsRunning(false)
-          playSound()
-        }}
-      >
-        Skip
-      </PixelButton></div>
+      <SkipButtonContainer>
+        <PixelButton isBreak={isBreak}
+          whileHover={{ scale: 1.08 }}
+          whileTap={{ scale: 0.96 }}
+          style={{ zIndex: 99, position: 'relative' }}
+          onClick={isBreak ? () => { console.log('skip break'); skipBreak(); } : () => {
+            console.log('skip focus');
+            setPomodoroCount(prev => {
+              const newVal = prev + 1
+              if (onCountChange) onCountChange(newVal, breakCount)
+              return newVal
+            })
+            setIsBreak(true)
+            setTimeLeft((pomodoroCount + 1) % 4 === 0 ? 15 * 60 : 5 * 60)
+            setProgress(100)
+            setIsRunning(false)
+            playSound()
+          }}
+        >
+          Skip
+        </PixelButton>
+      </SkipButtonContainer>
       {showNotif && (
         <div style={{
           background: '#fffbe7',
@@ -367,6 +374,31 @@ const PomodoroTimer = forwardRef<{
           {isBreak ? 'Break selesai! Saatnya fokus!' : 'Sesi fokus selesai! Saatnya break!'}
         </div>
       )}
+      {/* IFRAME YOUTUBE DI POJOK KANAN BAWAH, TIDAK MEMPENGARUHI LAYOUT */}
+      <div style={{
+        position: 'fixed',
+        right: 0,
+        bottom: 0,
+        width: 1,
+        height: 1,
+        opacity: 0,
+        pointerEvents: 'none',
+        zIndex: 0
+      }}>
+        {isBreak && ytSrc && (
+          <iframe
+            ref={ytIframeRef}
+            width="1"
+            height="1"
+            src={ytSrc + '&enablejsapi=1'}
+            title="Break Song"
+            frameBorder="0"
+            allow="autoplay; encrypted-media"
+            allowFullScreen
+            style={{ width: 1, height: 1, opacity: 0, pointerEvents: 'none' }}
+          />
+        )}
+      </div>
     </TimerContainer>
   )
 })
