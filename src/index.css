@@ -32,3 +32,12 @@ body {
 button {
   font-family: 'Press Start 2P', system-ui, Avenir, Helvetica, Arial, sans-serif;
 }
+
+@media (max-width: 600px) {
+  .skip-btn-mobile {
+    margin-top: 0.5rem;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+  }
+}

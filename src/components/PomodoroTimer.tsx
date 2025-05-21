@@ -40,6 +40,8 @@ const ButtonContainer = styled.div`
   justify-content: center;
   width: 100%;
   @media (max-width: 600px) {
+    flex-direction: row;
+    align-items: center;
     gap: 0.5rem 0.5rem;
   }
 `
@@ -330,25 +332,25 @@ const PomodoroTimer = forwardRef<{
         >
           Reset
         </PixelButton>
-        <PixelButton isBreak={isBreak}
-          whileHover={{ scale: 1.08 }}
-          whileTap={{ scale: 0.96 }}
-          onClick={isBreak ? skipBreak : () => {
-            setPomodoroCount(prev => {
-              const newVal = prev + 1
-              if (onCountChange) onCountChange(newVal, breakCount)
-              return newVal
-            })
-            setIsBreak(true)
-            setTimeLeft((pomodoroCount + 1) % 4 === 0 ? 15 * 60 : 5 * 60)
-            setProgress(100)
-            setIsRunning(false)
-            playSound()
-          }}
-        >
-          Skip
-        </PixelButton>
       </ButtonContainer>
+      <div className="skip-btn-mobile"><PixelButton isBreak={isBreak}
+        whileHover={{ scale: 1.08 }}
+        whileTap={{ scale: 0.96 }}
+        onClick={isBreak ? skipBreak : () => {
+          setPomodoroCount(prev => {
+            const newVal = prev + 1
+            if (onCountChange) onCountChange(newVal, breakCount)
+            return newVal
+          })
+          setIsBreak(true)
+          setTimeLeft((pomodoroCount + 1) % 4 === 0 ? 15 * 60 : 5 * 60)
+          setProgress(100)
+          setIsRunning(false)
+          playSound()
+        }}
+      >
+        Skip
+      </PixelButton></div>
       {showNotif && (
         <div style={{
           background: '#fffbe7',
