@@ -157,6 +157,8 @@ const PomodoroTimer = forwardRef<{
   const [showNotif, setShowNotif] = useState(false)
   const [ytSrc, setYtSrc] = useState<string | null>(null)
   const ytIframeRef = useRef<HTMLIFrameElement | null>(null)
+  const startTimeRef = useRef<number>(0)
+  const initialTimeRef = useRef<number>(25 * 60)
 
   useImperativeHandle(ref, () => ({
     resetCount: () => {
@@ -224,13 +226,20 @@ const PomodoroTimer = forwardRef<{
   useEffect(() => {
     let interval: number
     if (isRunning && timeLeft > 0) {
+      startTimeRef.current = Date.now()
+      initialTimeRef.current = timeLeft
+
       interval = setInterval(() => {
-        setTimeLeft(prev => {
-          const newTime = prev - 1
+        const elapsedSeconds = Math.floor((Date.now() - startTimeRef.current) / 1000)
+        const newTime = Math.max(0, initialTimeRef.current - elapsedSeconds)
+
+        setTimeLeft(newTime)
           setProgress((newTime / (isBreak ? (pomodoroCount % 4 === 0 && pomodoroCount !== 0 ? 15*60 : 5*60) : 25*60)) * 100)
-          return newTime
-        })
-      }, 1000)
+
+        if (newTime === 0) {
+          clearInterval(interval)
+        }
+      }, 100) // Update more frequently for smoother countdown
     } else if (timeLeft === 0) {
       setIsRunning(false)
       playSound()
