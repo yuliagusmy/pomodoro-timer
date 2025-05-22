@@ -1,6 +1,20 @@
-import { motion } from 'framer-motion'
-import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
-import styled from 'styled-components'
+import { motion } from 'framer-motion';
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import styled from 'styled-components';
+
+// Add type definitions
+declare global {
+  interface ServiceWorkerRegistration {
+    sync: {
+      register(tag: string): Promise<void>;
+    };
+  }
+  interface Window {
+    SyncManager: {
+      new(): void;
+    };
+  }
+}
 
 const TimerContainer = styled.div`
   display: flex;
@@ -159,6 +173,34 @@ const PomodoroTimer = forwardRef<{
   const ytIframeRef = useRef<HTMLIFrameElement | null>(null)
   const startTimeRef = useRef<number>(0)
   const initialTimeRef = useRef<number>(25 * 60)
+  const timerRef = useRef<number | null>(null)
+  const lastUpdateTimeRef = useRef<number>(0)
+
+  // Register service worker
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').then(registration => {
+        console.log('Service Worker registered with scope:', registration.scope);
+      }).catch(error => {
+        console.error('Service Worker registration failed:', error);
+      });
+    }
+  }, []);
+
+  // Handle background sync
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', (event) => {
+        if (event.data.type === 'TIMER_SYNC') {
+          const currentTime = Date.now();
+          const elapsedSeconds = Math.floor((currentTime - startTimeRef.current) / 1000);
+          const newTime = Math.max(0, initialTimeRef.current - elapsedSeconds);
+          setTimeLeft(newTime);
+          setProgress((newTime / (isBreak ? (pomodoroCount % 4 === 0 && pomodoroCount !== 0 ? 15*60 : 5*60) : 25*60)) * 100);
+        }
+      });
+    }
+  }, [isBreak, pomodoroCount]);
 
   useImperativeHandle(ref, () => ({
     resetCount: () => {
@@ -193,14 +235,30 @@ const PomodoroTimer = forwardRef<{
   }
 
   const startTimer = useCallback(() => {
-    setIsRunning(true)
-    playSound()
-  }, [])
+    setIsRunning(true);
+    startTimeRef.current = Date.now();
+    initialTimeRef.current = timeLeft;
+    lastUpdateTimeRef.current = Date.now();
+    playSound();
+
+    // Request background sync with type checking
+    if ('serviceWorker' in navigator && 'SyncManager' in window) {
+      navigator.serviceWorker.ready.then(registration => {
+        if ('sync' in registration) {
+          registration.sync.register('timer-sync');
+        }
+      });
+    }
+  }, [timeLeft]);
 
   const pauseTimer = useCallback(() => {
-    setIsRunning(false)
-    playSound()
-  }, [])
+    setIsRunning(false);
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    playSound();
+  }, []);
 
   const resetTimer = useCallback(() => {
     setIsRunning(false)
@@ -224,41 +282,52 @@ const PomodoroTimer = forwardRef<{
   }, [onCountChange, pomodoroCount])
 
   useEffect(() => {
-    let interval: number
     if (isRunning && timeLeft > 0) {
-      startTimeRef.current = Date.now()
-      initialTimeRef.current = timeLeft
+      const updateTimer = () => {
+        const currentTime = Date.now();
+        const elapsedSeconds = Math.floor((currentTime - startTimeRef.current) / 1000);
+        const newTime = Math.max(0, initialTimeRef.current - elapsedSeconds);
 
-      interval = setInterval(() => {
-        const elapsedSeconds = Math.floor((Date.now() - startTimeRef.current) / 1000)
-        const newTime = Math.max(0, initialTimeRef.current - elapsedSeconds)
-
-        setTimeLeft(newTime)
-          setProgress((newTime / (isBreak ? (pomodoroCount % 4 === 0 && pomodoroCount !== 0 ? 15*60 : 5*60) : 25*60)) * 100)
+        setTimeLeft(newTime);
+        setProgress((newTime / (isBreak ? (pomodoroCount % 4 === 0 && pomodoroCount !== 0 ? 15*60 : 5*60) : 25*60)) * 100);
 
         if (newTime === 0) {
-          clearInterval(interval)
+          setIsRunning(false);
+          playAlarm();
+          setShowNotif(true);
+          setTimeout(() => setShowNotif(false), 2500);
+
+          if (!isBreak) {
+            setPomodoroCount(prev => prev + 1);
+            setIsBreak(true);
+            setTimeLeft(pomodoroCount % 4 === 0 && pomodoroCount !== 0 ? 15 * 60 : 5 * 60);
+            setProgress(100);
+          } else {
+            setIsBreak(false);
+            setTimeLeft(25 * 60);
+            setProgress(100);
+          }
         }
-      }, 100) // Update more frequently for smoother countdown
-    } else if (timeLeft === 0) {
-      setIsRunning(false)
-      playSound()
-      setShowNotif(true)
-      setTimeout(() => setShowNotif(false), 2500)
-      if (!isBreak) {
-        setPomodoroCount(prev => prev + 1)
-        setIsBreak(true)
-        setTimeLeft((pomodoroCount + 1) % 4 === 0 ? 15 * 60 : 5 * 60)
-        setProgress(100)
-      } else {
-        setBreakCount(prev => prev + 1)
-        setIsBreak(false)
-        setTimeLeft(25 * 60)
-        setProgress(100)
-      }
+      };
+
+      // Update timer every 100ms for smooth countdown
+      timerRef.current = window.setInterval(updateTimer, 100);
+
+      // Also update when tab becomes visible
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          updateTimer();
+        }
+      });
+
+      return () => {
+        if (timerRef.current) {
+          clearInterval(timerRef.current);
+        }
+        document.removeEventListener('visibilitychange', updateTimer);
+      };
     }
-    return () => clearInterval(interval)
-  }, [isRunning, timeLeft, isBreak, pomodoroCount])
+  }, [isRunning, timeLeft, isBreak, pomodoroCount]);
 
   useEffect(() => {
     if (isBreak) {

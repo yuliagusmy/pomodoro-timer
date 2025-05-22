@@ -17,5 +17,14 @@
       "sizes": "512x512",
       "type": "image/png"
     }
-  ]
+  ],
+  "background": {
+    "scripts": ["sw.js"],
+    "type": "module"
+  },
+  "permissions": [
+    "notifications",
+    "background-sync"
+  ],
+  "gcm_sender_id": "YOUR_SENDER_ID"
 }
