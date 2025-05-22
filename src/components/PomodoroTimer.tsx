@@ -270,16 +270,30 @@ const PomodoroTimer = forwardRef<{
 
   const skipBreak = useCallback(() => {
     setBreakCount(prev => {
-      const newVal = prev + 1
-      if (onCountChange) onCountChange(pomodoroCount, newVal)
-      return newVal
-    })
-    setIsBreak(false)
-    setTimeLeft(25 * 60)
-    setProgress(100)
-    setIsRunning(false)
-    playSound()
-  }, [onCountChange, pomodoroCount])
+      const newVal = prev + 1;
+      if (onCountChange) onCountChange(pomodoroCount, newVal);
+      return newVal;
+    });
+    setIsBreak(false);
+    setTimeLeft(25 * 60);
+    setProgress(100);
+    setIsRunning(false);
+    playSound();
+  }, [onCountChange, pomodoroCount]);
+
+  const skipFocus = useCallback(() => {
+    setPomodoroCount(prev => {
+      const newVal = prev + 1;
+      if (onCountChange) onCountChange(newVal, breakCount);
+      return newVal;
+    });
+    setIsBreak(true);
+    const nextBreakDuration = (pomodoroCount + 1) % 4 === 0 ? 15 * 60 : 5 * 60;
+    setTimeLeft(nextBreakDuration);
+    setProgress(100);
+    setIsRunning(false);
+    playSound();
+  }, [onCountChange, pomodoroCount, breakCount]);
 
   useEffect(() => {
     if (isRunning && timeLeft > 0) {
@@ -289,7 +303,8 @@ const PomodoroTimer = forwardRef<{
         const newTime = Math.max(0, initialTimeRef.current - elapsedSeconds);
 
         setTimeLeft(newTime);
-        setProgress((newTime / (isBreak ? (pomodoroCount % 4 === 0 && pomodoroCount !== 0 ? 15*60 : 5*60) : 25*60)) * 100);
+        const breakDuration = isBreak ? (pomodoroCount % 4 === 0 && pomodoroCount !== 0 ? 15 * 60 : 5 * 60) : 25 * 60;
+        setProgress((newTime / breakDuration) * 100);
 
         if (newTime === 0) {
           setIsRunning(false);
@@ -300,7 +315,8 @@ const PomodoroTimer = forwardRef<{
           if (!isBreak) {
             setPomodoroCount(prev => prev + 1);
             setIsBreak(true);
-            setTimeLeft(pomodoroCount % 4 === 0 && pomodoroCount !== 0 ? 15 * 60 : 5 * 60);
+            const nextBreakDuration = (pomodoroCount + 1) % 4 === 0 ? 15 * 60 : 5 * 60;
+            setTimeLeft(nextBreakDuration);
             setProgress(100);
           } else {
             setIsBreak(false);
@@ -419,19 +435,7 @@ const PomodoroTimer = forwardRef<{
           whileHover={{ scale: 1.08 }}
           whileTap={{ scale: 0.96 }}
           style={{ zIndex: 99, position: 'relative' }}
-          onClick={isBreak ? () => { console.log('skip break'); skipBreak(); } : () => {
-            console.log('skip focus');
-            setPomodoroCount(prev => {
-              const newVal = prev + 1
-              if (onCountChange) onCountChange(newVal, breakCount)
-              return newVal
-            })
-            setIsBreak(true)
-            setTimeLeft((pomodoroCount + 1) % 4 === 0 ? 15 * 60 : 5 * 60)
-            setProgress(100)
-            setIsRunning(false)
-            playSound()
-          }}
+          onClick={isBreak ? skipBreak : skipFocus}
         >
           Skip
         </PixelButton>
