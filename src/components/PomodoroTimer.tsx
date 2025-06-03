@@ -146,19 +146,6 @@ type PomodoroTimerProps = {
   onModeChange?: (isBreak: boolean) => void
 }
 
-const SkipButtonContainer = styled.div`
-  width: 100%;
-  display: flex;
-  justify-content: center;
-  margin-top: 0.2rem;
-  gap: 1.2rem;
-  @media (max-width: 600px) {
-    gap: 0.5rem;
-    margin-top: 0.2rem;
-    margin-bottom: 2.2rem;
-  }
-`
-
 const PomodoroTimer = forwardRef<{
   resetCount: () => void
 }, PomodoroTimerProps>(({ onCountChange, onModeChange }, ref) => {
@@ -175,6 +162,20 @@ const PomodoroTimer = forwardRef<{
   const initialTimeRef = useRef<number>(25 * 60)
   const timerRef = useRef<number | null>(null)
   const lastUpdateTimeRef = useRef<number>(0)
+
+  // Helper function to get current session duration
+  const getSessionDuration = useCallback((isBreakSession: boolean, currentPomodoroCount: number) => {
+    if (isBreakSession) {
+      return currentPomodoroCount % 4 === 0 && currentPomodoroCount !== 0 ? 15 * 60 : 5 * 60;
+    }
+    return 25 * 60;
+  }, []);
+
+  // Update initialTimeRef when session type changes
+  useEffect(() => {
+    initialTimeRef.current = getSessionDuration(isBreak, pomodoroCount);
+    setTimeLeft(initialTimeRef.current);
+  }, [isBreak, pomodoroCount, getSessionDuration]);
 
   // Register service worker
   useEffect(() => {
@@ -241,7 +242,6 @@ const PomodoroTimer = forwardRef<{
     lastUpdateTimeRef.current = Date.now();
     playSound();
 
-    // Request background sync with type checking
     if ('serviceWorker' in navigator && 'SyncManager' in window) {
       navigator.serviceWorker.ready.then(registration => {
         if ('sync' in registration) {
@@ -261,39 +261,40 @@ const PomodoroTimer = forwardRef<{
   }, []);
 
   const resetTimer = useCallback(() => {
-    setIsRunning(false)
-    setTimeLeft(25 * 60)
-    setProgress(100)
-    setIsBreak(false)
-    playSound()
-  }, [])
+    setIsRunning(false);
+    const newDuration = getSessionDuration(isBreak, pomodoroCount);
+    setTimeLeft(newDuration);
+    initialTimeRef.current = newDuration;
+    setProgress(100);
+    playSound();
+  }, [isBreak, pomodoroCount, getSessionDuration]);
 
-  const skipBreak = useCallback(() => {
-    setBreakCount(prev => {
-      const newVal = prev + 1;
-      if (onCountChange) onCountChange(pomodoroCount, newVal);
-      return newVal;
-    });
-    setIsBreak(false);
-    setTimeLeft(25 * 60);
+  // Function to handle session switches
+  const switchSession = useCallback((toBreak: boolean) => {
+    const newPomodoroCount = toBreak ? pomodoroCount + 1 : pomodoroCount;
+    const newDuration = getSessionDuration(toBreak, newPomodoroCount);
+
+    if (toBreak) {
+      setPomodoroCount(prev => {
+        const newVal = prev + 1;
+        if (onCountChange) onCountChange(newVal, breakCount);
+        return newVal;
+      });
+    } else {
+      setBreakCount(prev => {
+        const newVal = prev + 1;
+        if (onCountChange) onCountChange(pomodoroCount, newVal);
+        return newVal;
+      });
+    }
+
+    setIsBreak(toBreak);
+    setTimeLeft(newDuration);
+    initialTimeRef.current = newDuration;
     setProgress(100);
     setIsRunning(false);
     playSound();
-  }, [onCountChange, pomodoroCount]);
-
-  const skipFocus = useCallback(() => {
-    setPomodoroCount(prev => {
-      const newVal = prev + 1;
-      if (onCountChange) onCountChange(newVal, breakCount);
-      return newVal;
-    });
-    setIsBreak(true);
-    const nextBreakDuration = (pomodoroCount + 1) % 4 === 0 ? 15 * 60 : 5 * 60;
-    setTimeLeft(nextBreakDuration);
-    setProgress(100);
-    setIsRunning(false);
-    playSound();
-  }, [onCountChange, pomodoroCount, breakCount]);
+  }, [pomodoroCount, breakCount, onCountChange, getSessionDuration]);
 
   useEffect(() => {
     if (isRunning && timeLeft > 0) {
@@ -303,8 +304,8 @@ const PomodoroTimer = forwardRef<{
         const newTime = Math.max(0, initialTimeRef.current - elapsedSeconds);
 
         setTimeLeft(newTime);
-        const breakDuration = isBreak ? (pomodoroCount % 4 === 0 && pomodoroCount !== 0 ? 15 * 60 : 5 * 60) : 25 * 60;
-        setProgress((newTime / breakDuration) * 100);
+        const currentDuration = getSessionDuration(isBreak, pomodoroCount);
+        setProgress((newTime / currentDuration) * 100);
 
         if (newTime === 0) {
           setIsRunning(false);
@@ -312,24 +313,22 @@ const PomodoroTimer = forwardRef<{
           setShowNotif(true);
           setTimeout(() => setShowNotif(false), 2500);
 
-          if (!isBreak) {
-            setPomodoroCount(prev => prev + 1);
-            setIsBreak(true);
-            const nextBreakDuration = (pomodoroCount + 1) % 4 === 0 ? 15 * 60 : 5 * 60;
-            setTimeLeft(nextBreakDuration);
-            setProgress(100);
-          } else {
-            setIsBreak(false);
-            setTimeLeft(25 * 60);
-            setProgress(100);
-          }
+          // Switch to next session
+          switchSession(!isBreak);
         }
       };
 
-      // Update timer every 100ms for smooth countdown
+      // Clear any existing interval first
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+
+      // Start new interval
       timerRef.current = window.setInterval(updateTimer, 100);
 
-      // Also update when tab becomes visible
+      // Initial update
+      updateTimer();
+
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
           updateTimer();
@@ -339,11 +338,20 @@ const PomodoroTimer = forwardRef<{
       return () => {
         if (timerRef.current) {
           clearInterval(timerRef.current);
+          timerRef.current = null;
         }
         document.removeEventListener('visibilitychange', updateTimer);
       };
     }
-  }, [isRunning, timeLeft, isBreak, pomodoroCount]);
+  }, [isRunning, timeLeft, isBreak, pomodoroCount, getSessionDuration, switchSession]);
+
+  // Add effect to handle timer state changes
+  useEffect(() => {
+    if (!isRunning && timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }, [isRunning]);
 
   useEffect(() => {
     if (isBreak) {
@@ -430,16 +438,6 @@ const PomodoroTimer = forwardRef<{
           Reset
         </PixelButton>
       </ButtonContainer>
-      <SkipButtonContainer>
-        <PixelButton isBreak={isBreak}
-          whileHover={{ scale: 1.08 }}
-          whileTap={{ scale: 0.96 }}
-          style={{ zIndex: 99, position: 'relative' }}
-          onClick={isBreak ? skipBreak : skipFocus}
-        >
-          Skip
-        </PixelButton>
-      </SkipButtonContainer>
       {showNotif && (
         <div style={{
           background: '#fffbe7',
@@ -451,7 +449,7 @@ const PomodoroTimer = forwardRef<{
           padding: '1rem 2rem',
           marginTop: 10,
           boxShadow: '0 4px 0 #bfa16b',
-        zIndex: 10
+          zIndex: 10
         }}>
           {isBreak ? 'Break selesai! Saatnya fokus!' : 'Sesi fokus selesai! Saatnya break!'}
         </div>
